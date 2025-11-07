@@ -19,7 +19,7 @@ jobs:
       
       - name: Add upstream remote
         run: |
-          git remote add upstream https://github.com/LostCityRS/Content.git || true
+          git remote get-url upstream > /dev/null 2>&1 || git remote add upstream https://github.com/LostCityRS/Content.git
           git fetch upstream 245.2
       
       - name: Check for upstream updates
@@ -90,7 +90,8 @@ jobs:
             ### How to sync:
             \`\`\`bash
             git checkout 245.2
-            git fetch upstream 245.2
+            git remote add upstream https://github.com/LostCityRS/Content.git
+            git fetch upstream
             git merge upstream/245.2
             git push origin 245.2
             \`\`\`
