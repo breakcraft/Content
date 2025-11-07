@@ -1,0 +1,157 @@
+name: Check Upstream Updates
+
+on:
+  schedule:
+    # Run daily at 00:00 UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  check-upstream:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          ref: '245.2'
+          fetch-depth: 0
+      
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/LostCityRS/Content.git || true
+          git fetch upstream 245.2
+      
+      - name: Check for upstream updates
+        id: check
+        run: |
+          # Get the current commit of our fork's 245.2 branch
+          FORK_COMMIT=$(git rev-parse HEAD)
+          echo "Fork commit: $FORK_COMMIT"
+          
+          # Get the latest commit from upstream's 245.2 branch
+          UPSTREAM_COMMIT=$(git rev-parse upstream/245.2)
+          echo "Upstream commit: $UPSTREAM_COMMIT"
+          
+          # Check if upstream has new commits
+          if [ "$FORK_COMMIT" = "$UPSTREAM_COMMIT" ]; then
+            echo "status=up-to-date" >> $GITHUB_OUTPUT
+            echo "✅ Fork is up to date with upstream"
+          else
+            # Check if we can fast-forward merge
+            MERGE_BASE=$(git merge-base HEAD upstream/245.2)
+            
+            if [ "$MERGE_BASE" = "$FORK_COMMIT" ]; then
+              echo "status=updates-available" >> $GITHUB_OUTPUT
+              echo "merge_type=fast-forward" >> $GITHUB_OUTPUT
+              echo "⚠️ Upstream has new commits that can be fast-forward merged"
+              
+              # Get commit count and list
+              COMMIT_COUNT=$(git rev-list --count HEAD..upstream/245.2)
+              echo "commit_count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
+              
+              echo "📝 New commits ($COMMIT_COUNT):"
+              git log --oneline HEAD..upstream/245.2
+            else
+              echo "status=updates-available" >> $GITHUB_OUTPUT
+              echo "merge_type=requires-merge" >> $GITHUB_OUTPUT
+              echo "⚠️ Upstream has diverged and may require a merge"
+              
+              # Get commit count
+              COMMIT_COUNT=$(git rev-list --count HEAD..upstream/245.2)
+              echo "commit_count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
+              
+              echo "📝 New upstream commits ($COMMIT_COUNT):"
+              git log --oneline HEAD..upstream/245.2
+            fi
+          fi
+      
+      - name: Create/Update Issue for Updates
+        if: steps.check.outputs.status == 'updates-available'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const mergeType = '${{ steps.check.outputs.merge_type }}';
+            const commitCount = '${{ steps.check.outputs.commit_count }}';
+            const upstreamUrl = 'https://github.com/LostCityRS/Content/tree/245.2';
+            
+            const title = '🔄 Upstream Updates Available (245.2)';
+            const body = `## Upstream Updates Detected
+            
+            The upstream repository [LostCityRS/Content](${upstreamUrl}) has **${commitCount}** new commit(s) on branch \`245.2\`.
+            
+            **Merge Type:** ${mergeType === 'fast-forward' ? '✅ Fast-forward (clean merge)' : '⚠️ Requires merge (branches have diverged)'}
+            
+            ### Actions to take:
+            1. Review the upstream changes: ${upstreamUrl}
+            2. Sync the changes to this fork
+            3. Test the changes
+            
+            ### How to sync:
+            \`\`\`bash
+            git checkout 245.2
+            git fetch upstream 245.2
+            git merge upstream/245.2
+            git push origin 245.2
+            \`\`\`
+            
+            ---
+            _This issue was automatically created by the upstream sync check workflow._
+            _Last checked: ${new Date().toISOString()}_
+            `;
+            
+            // Search for existing issue
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: ['upstream-sync']
+            });
+            
+            const existingIssue = issues.data.find(issue => 
+              issue.title === title
+            );
+            
+            if (existingIssue) {
+              // Update existing issue
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: body
+              });
+              
+              // Add a comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: `🔔 Upstream check completed: **${commitCount}** new commit(s) detected (${mergeType})`
+              });
+              
+              console.log(`Updated existing issue #${existingIssue.number}`);
+            } else {
+              // Create new issue
+              const issue = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['upstream-sync']
+              });
+              
+              console.log(`Created new issue #${issue.data.number}`);
+            }
+      
+      - name: Summary
+        run: |
+          if [ "${{ steps.check.outputs.status }}" = "up-to-date" ]; then
+            echo "### ✅ Fork is up to date" >> $GITHUB_STEP_SUMMARY
+            echo "No action needed. The fork's \`245.2\` branch is synchronized with upstream." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ⚠️ Updates Available" >> $GITHUB_STEP_SUMMARY
+            echo "**Commits:** ${{ steps.check.outputs.commit_count }}" >> $GITHUB_STEP_SUMMARY
+            echo "**Merge Type:** ${{ steps.check.outputs.merge_type }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "An issue has been created to track the upstream sync." >> $GITHUB_STEP_SUMMARY
+          fi
