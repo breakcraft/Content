@@ -1,4 +1,4 @@
-name: Check Upstream Updates
+name: Sync with Upstream
 
 on:
   schedule:
@@ -10,7 +10,7 @@ jobs:
   check-upstream:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       issues: write
     
     steps:
@@ -69,47 +69,74 @@ jobs:
             fi
           fi
       
-      - name: Create/Update Issue for Updates
+      - name: Auto-merge upstream changes
         if: steps.check.outputs.status == 'updates-available'
+        run: |
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          MERGE_TYPE="${{ steps.check.outputs.merge_type }}"
+          COMMIT_COUNT="${{ steps.check.outputs.commit_count }}"
+          
+          echo "🔄 Merging $COMMIT_COUNT commit(s) from upstream..."
+          
+          # Attempt to merge upstream changes
+          if git merge upstream/245.2 --no-edit; then
+            echo "✅ Successfully merged upstream changes"
+            
+            # Push the changes
+            git push origin 245.2
+            echo "✅ Successfully pushed changes to fork"
+            echo "merge_result=success" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Merge conflict detected - manual intervention required"
+            git merge --abort
+            echo "merge_result=conflict" >> $GITHUB_OUTPUT
+          fi
+        id: merge
+      
+      - name: Create Issue on Merge Conflict
+        if: steps.merge.outputs.merge_result == 'conflict'
         uses: actions/github-script@v7
         with:
           script: |
-            const mergeType = '${{ steps.check.outputs.merge_type }}';
             const commitCount = '${{ steps.check.outputs.commit_count }}';
             const upstreamUrl = 'https://github.com/LostCityRS/Content/tree/245.2';
             
-            const title = '🔄 Upstream Updates Available (245.2)';
-            const body = `## Upstream Updates Detected
+            const title = '⚠️ Upstream Merge Conflict (245.2)';
+            const body = `## Merge Conflict Detected
             
-            The upstream repository [LostCityRS/Content](${upstreamUrl}) has **${commitCount}** new commit(s) on branch \`245.2\`.
+            The automated upstream sync workflow detected **${commitCount}** new commit(s) from [LostCityRS/Content](${upstreamUrl}) but encountered merge conflicts.
             
-            **Merge Type:** ${mergeType === 'fast-forward' ? '✅ Fast-forward (clean merge)' : '⚠️ Requires merge (branches have diverged)'}
+            **Manual intervention is required** to resolve the conflicts and complete the sync.
             
-            ### Actions to take:
-            1. Review the upstream changes: ${upstreamUrl}
-            2. Sync the changes to this fork
-            3. Test the changes
-            
-            ### How to sync:
+            ### How to resolve:
             \`\`\`bash
             git checkout 245.2
             git remote add upstream https://github.com/LostCityRS/Content.git
             git fetch upstream
             git merge upstream/245.2
+            # Resolve conflicts manually
+            git add .
+            git commit
             git push origin 245.2
             \`\`\`
+            
+            ### Upstream changes:
+            View the changes at: ${upstreamUrl}
             
             ---
             _This issue was automatically created by the upstream sync check workflow._
             _Last checked: ${new Date().toISOString()}_
             `;
             
-            // Search for existing issue
+            // Search for existing conflict issue
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open',
-              labels: ['upstream-sync']
+              labels: ['upstream-sync', 'merge-conflict']
             });
             
             const existingIssue = issues.data.find(issue => 
@@ -125,12 +152,11 @@ jobs:
                 body: body
               });
               
-              // Add a comment
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: existingIssue.number,
-                body: `🔔 Upstream check completed: **${commitCount}** new commit(s) detected (${mergeType})`
+                body: `🔔 Merge conflict still exists. **${commitCount}** commit(s) pending from upstream.`
               });
               
               console.log(`Updated existing issue #${existingIssue.number}`);
@@ -141,7 +167,7 @@ jobs:
                 repo: context.repo.repo,
                 title: title,
                 body: body,
-                labels: ['upstream-sync']
+                labels: ['upstream-sync', 'merge-conflict']
               });
               
               console.log(`Created new issue #${issue.data.number}`);
@@ -152,10 +178,15 @@ jobs:
           if [ "${{ steps.check.outputs.status }}" = "up-to-date" ]; then
             echo "### ✅ Fork is up to date" >> $GITHUB_STEP_SUMMARY
             echo "No action needed. The fork's \`245.2\` branch is synchronized with upstream." >> $GITHUB_STEP_SUMMARY
-          else
-            echo "### ⚠️ Updates Available" >> $GITHUB_STEP_SUMMARY
-            echo "**Commits:** ${{ steps.check.outputs.commit_count }}" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.merge.outputs.merge_result }}" = "success" ]; then
+            echo "### ✅ Successfully Synced with Upstream" >> $GITHUB_STEP_SUMMARY
+            echo "**Commits merged:** ${{ steps.check.outputs.commit_count }}" >> $GITHUB_STEP_SUMMARY
             echo "**Merge Type:** ${{ steps.check.outputs.merge_type }}" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "An issue has been created to track the upstream sync." >> $GITHUB_STEP_SUMMARY
+            echo "The fork's \`245.2\` branch has been automatically updated with upstream changes." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ⚠️ Merge Conflict" >> $GITHUB_STEP_SUMMARY
+            echo "**Commits pending:** ${{ steps.check.outputs.commit_count }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Automatic merge failed due to conflicts. An issue has been created for manual resolution." >> $GITHUB_STEP_SUMMARY
           fi

@@ -9,13 +9,13 @@
 
 This repository includes automated workflows to help maintain synchronization with the upstream repository:
 
-### Upstream Sync Check
+### Upstream Sync
 - **Schedule**: Runs daily at 00:00 UTC
-- **Purpose**: Automatically checks if the upstream repository [LostCityRS/Content](https://github.com/LostCityRS/Content) (branch `245.2`) has new commits
-- **Action**: Creates or updates an issue when upstream updates are detected
+- **Purpose**: Automatically syncs the fork with the upstream repository [LostCityRS/Content](https://github.com/LostCityRS/Content) (branch `245.2`)
+- **Action**: When upstream has new commits, the workflow automatically merges them into this fork
 - **Manual trigger**: Can be manually triggered from the Actions tab
 
-The workflow will notify maintainers when the upstream repository has changes that can be merged into this fork.
+If merge conflicts occur, the workflow will create an issue for manual resolution.
 
 ## License
 
