@@ -82,11 +82,11 @@ if (p_finduid(uid) = true) {
 if_close;
 if (p_finduid(uid) = true) {
     p_clearpendingaction;
-    %attackstyle = $style;
+    %com_mode = $style;
     ~player_combat_stat;
     return;
 }
-%attackstyle = %attackstyle; // resync varp
+%com_mode = %com_mode; // resync varp
 
 // updates the attack style tab depending on the
 // weapon currently equipped or not by the player

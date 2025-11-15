@@ -1,5 +1,5 @@
 [opheld3,ogre_bow]
-if (%chompybird_progress < ^chompybird_complete) {
+if (%chompybird < ^chompybird_complete) {
     mes("You've scratched up no kills yet!");
     mes("You've got to complete the quest first!");
     return;
@@ -45,7 +45,7 @@ if ($kills < 95) {
     return("Yeoman");
 }
 if ($kills < 125) {
-    return("Ogre Markman");
+    return("Ogre Marksman");
 }
 if ($kills < 170) {
     return("Marksman");

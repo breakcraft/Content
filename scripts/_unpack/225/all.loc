@@ -8514,13 +8514,13 @@ model=model_loc_1549
 mirror=yes
 blockrange=no
 
-[portcullis_1l]
+[loc_1554]
 model=model_loc_47
 mirror=yes
 active=no
 blockrange=no
 
-[portcullis_1r]
+[loc_1555]
 model=model_loc_47
 active=no
 blockrange=no
