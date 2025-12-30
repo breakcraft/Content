@@ -64,4 +64,4 @@ if ($missing > 0) {
 ~respawnfishingspots(0_44_53_0_0, 0_44_53_memberfish, 3);
 
 [debugproc,fixfishingspots]
-queue(fixfishingspots, 0);
+queue(fixfishingspots, 0, 0);
